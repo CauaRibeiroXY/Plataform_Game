@@ -398,8 +398,8 @@ class Enemy_bee:
         self.height = 64
 
         # Velocity
-        self.vx = 2  # velocidade inicial
-        self.vy = -5
+        self.vx = 5  # velocidade inicial
+        self.vy = 0
 
 
         # State
@@ -422,39 +422,35 @@ class Enemy_bee:
         # Current sprite sequence
         self.frame_count = 0
         self.sprite_index = 0
-        self.current_sprite_vector = []
-        self.current_sprite_vector.append(self.sprites_idle_right)
+        self.sprites_fly_right = [self.sprites_a_right, self.sprites_b_right]
+        self.sprites_fly_left = [self.sprites_a_left, self.sprites_b_left]
+        self.current_sprite_vector = self.sprites_fly_right
         self.current_sprite = self.current_sprite_vector[0]
-        
     
-    def fly(self):
-        self.vy = 0
-        self.vx = 4
 
 
     def update(self):
         if not self.live:
             return
-        
+        self.x += self.vx
+        self.y += self.vy
         
         # Change direction
         if self.x < self.min_x or self.x > self.max_x:
             self.vx *= -1
-            self.vy = -10
             self.facing_right = not self.facing_right
-
+        
         # Select sprites
-        # Animation update
+        if self.vx > 0:
+            self.current_sprite_vector = self.sprites_fly_right
+        elif self.vx < 0:
+            self.current_sprite_vector = self.sprites_fly_left
+
         self.frame_count += 1
-        if self.current_sprite_vector == self.sprites_idle_right or self.current_sprite_vector == self.sprites_idle_left :
-            if self.frame_count % 20 == 0:
-                self.sprite_index = (self.sprite_index + 1) % len(self.current_sprite_vector)
-                self.current_sprite = self.current_sprite_vector[self.sprite_index]
-        else:
-            if self.frame_count % 10 == 0:
-                self.sprite_index = (self.sprite_index + 1) % len(self.current_sprite_vector)
-                self.current_sprite = self.current_sprite_vector[self.sprite_index]
-    
+        if self.frame_count % 10 == 0:
+            self.sprite_index = (self.sprite_index + 1) % len(self.current_sprite_vector)
+            self.current_sprite = self.current_sprite_vector[self.sprite_index]
+        
 
  
     def draw(self):
@@ -537,6 +533,7 @@ def start_game():
     enemies.append(Enemy_frog(564,plat.y - 32,564,700))
     enemies.append(Enemy_frog(700,plat.y - 32,700,1000))
     enemies.append(Enemy_bee(100,200,100,500))
+    enemies.append(Enemy_bee(500,200,500,900))
     player = Player(enemies)
     hud = Hud_life(player)
 
