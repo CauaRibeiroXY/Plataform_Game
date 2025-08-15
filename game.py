@@ -5,17 +5,15 @@ HEIGHT = 600
 
 
 
-game_state = "playing"  # Pode ser "menu", "playing" ou "exit"
+game_state = "menu"  # Pode ser "menu", "playing" ou "exit"
 music_on = True
 
 
-menu_options = ["Start Game", "Toggle Music", "Exit"]
+menu_options = ["Start Game", "Toggle Music","Exit"]
 selected_option = None  # Para saber qual o jogador clicou
 
 #musica
-sound_music = sounds.music
-sound_music.set_volume(0.5)
-sound_music.play()
+music_playing = False
 
 #camera
 camera_x = 0
@@ -29,7 +27,8 @@ def draw():
     elif game_state == "playing":
         screen.draw.text("Game Started!", center=(WIDTH/2, HEIGHT/2), fontsize=50, color="white")
         screen.clear()
-        background.draw()
+        for back in background:
+            back.draw()
         player.draw()
         hud.draw()
         for enemy in enemies:
@@ -38,11 +37,15 @@ def draw():
         
         for plat in platforms:
             plat.draw()
-
+    elif game_state == "end_game":
+        screen.fill((0,0,0))
+        screen.draw.text("End Game",center=(WIDTH/2, HEIGHT/2), fontsize=50, color="white")
 
 
 
 def draw_menu():
+    global music_playing
+
     screen.draw.text("MAIN MENU", center=(WIDTH/2, 100), fontsize=60, color="yellow")
 
     for i, option in enumerate(menu_options):
@@ -67,19 +70,27 @@ def on_mouse_down(pos):
                 elif option == "Toggle Music":
                     music_on = not music_on
                     if music_on:
-                          sound_music.play()
+                          music.play("tema")
+                          music.set_volume(0.5)
                     else:
-                        sound_music.stop()
+                        music.stop()
                 elif option == "Exit":
                     exit()
 
 class Background:
-    def __init__(self):
+    def __init__(self,x=0,y=0,water=False):
+        self.x = x
+        self.y = y
+
+        self.water = water
             
         self.background_sky = Actor("background/background_clouds.png")
         self.background_floor = Actor("background/background_solid_dirt.png")
         self.background_sky_solid = Actor("background/background_solid_sky.png")
+        self.background_water_moving = Actor("background/background_water.png")
+
         
+
         #Dimension
         self.width = 256
         self.height = 256
@@ -87,8 +98,17 @@ class Background:
         self.background_floor.pos=100,500
         self.background_sky_solid.pos = 0,0
 
+        if self.water == True:
+            self.width = 128
+            self.height = 128
 
     def draw(self):
+        if self.water == True:
+            self.background_water_moving.topleft = (self.x - camera_x, self.y)
+            self.background_water_moving.draw()
+            return
+            
+        
         for i in range(0,WIDTH,self.width):
                 self.background_sky.topleft = i,0
                 self.background_sky.draw()
@@ -98,7 +118,8 @@ class Background:
         for i in range(0,WIDTH,self.width):
                 self.background_floor.topleft = i,500
                 self.background_floor.draw()
-
+        
+            
 
 
 class Player:
@@ -124,7 +145,7 @@ class Player:
         #Life
         self.lives = 3
 
-        
+
 
         # Sprites
         self.sprites_idle_right = [Actor("player/player_idle.png"),Actor("player/player_stand.png")]
@@ -182,6 +203,7 @@ class Player:
             player_top < enemy_bottom):
             if (self.vy > 0 and overlap_bottom < self.height/2):
                 self.vy = -10
+                sounds.sfx_disappear.play()
                 enemy.live = False #Kill enemy
             elif (player_right > enemy_left or player_right < enemy_left) and (player_left < enemy_right or player_left > enemy_right):
                 if not self.invulnerable:
@@ -189,6 +211,7 @@ class Player:
                         self.vx = -8
                     else:
                         self.vx = 8
+                    sounds.sfx_hurt.play()
                     self.lives -= 0.5
                     self.invulnerable = True
                     self.invulnerable_timer = 120
@@ -214,7 +237,9 @@ class Player:
     def jump(self):
         if self.on_ground:
             self.vy = -15
-            self.on_ground = False   
+            self.on_ground = False
+            sounds.sfx_jump.play()
+    
 
     def update(self, platforms, enemies_list):
 
@@ -274,13 +299,17 @@ class Player:
 
             
 class Platform:
-    def __init__(self, x, y, num_blocks, direction="horizontal"):
+    def __init__(self, x, y, num_blocks, direction="horizontal",final = False):
         self.x = x
         self.y = y
+        self.final = final
         self.num_blocks = num_blocks
         self.direction = direction
         self.block_size = 64
         self.block_image = "level/bricks_grey.png"
+        self.sign_exit = "level/sign_exit.png"
+
+        self.sign = Actor(self.sign_exit)
 
         # Define o Rect para colisões
         if self.direction == "horizontal":
@@ -289,6 +318,10 @@ class Platform:
             self.rect = Rect(x, y, self.block_size, self.num_blocks * self.block_size)
 
     def draw(self):
+        if self.final:
+            self.sign.pos = (self.rect.x - camera_x, self.rect.y)
+            self.sign.draw()
+            return
         for i in range(self.num_blocks):
             block = Actor(self.block_image)
             if self.direction == "horizontal":
@@ -308,7 +341,7 @@ class Enemy_frog:
         self.height = 64
 
         # Velocity
-        self.vx = 2  # velocidade inicial
+        self.vx = 1  # velocidade inicial
         self.vy = -5
 
 
@@ -316,6 +349,7 @@ class Enemy_frog:
         self.on_ground = True
         self.facing_right = True
         self.live = True
+        self.jump_cooldown = 0 
 
         # Movement limits
         self.min_x = min_x
@@ -333,10 +367,15 @@ class Enemy_frog:
         self.current_sprite = self.sprites_idle_right
 
     def jump(self):
-        self.vy = -5
-        self.vx = 2
+        self.vy = -10
+        if self.facing_right:
+            self.vx = 2
+        else:
+            self.vx = -2
+        
     def update(self):
         if not self.live:
+            
             return
         
         
@@ -357,13 +396,24 @@ class Enemy_frog:
                     self.y = plat.rect.top - self.height/2
                     self.vy = 0
                     self.on_ground = True
+                    if self.jump_cooldown <= 0:
+                        self.jump()
+                        self.jump_cooldown = 90
 
         # Change direction
-        if self.x < self.min_x or self.x > self.max_x:
-            self.vx *= -1
-            self.vy = -10
-            self.facing_right = not self.facing_right
-            
+        if self.x < self.min_x:
+            self.x = self.min_x
+            self.facing_right = True
+            if self.on_ground:
+                self.jump()
+        elif self.x > self.max_x:
+            self.x = self.max_x
+            self.facing_right = False
+            if self.on_ground:
+                self.jump()
+        
+        if self.jump_cooldown > 0:
+            self.jump_cooldown -= 1
 
         # Seleção de sprite
         if self.vx > 0:
@@ -454,10 +504,77 @@ class Enemy_bee:
 
  
     def draw(self):
-        # Desenho considerando a câmera
         if self.live:
             self.current_sprite.pos = (self.x - camera_x, self.y)
             self.current_sprite.draw()
+
+class Enemy_fish:
+    def __init__(self, x, y, min_y, max_y):
+        # Position
+        self.x = x
+        self.y = y
+
+        # Dimensions
+        self.width = 64
+        self.height = 64
+
+        #Moviment Start
+        self.vx = 0
+        self.vy = 3
+
+        # State
+        self.on_ground = True
+        self.facing_up = True
+        self.live = True
+
+        # Movement limits
+        self.min_y = min_y
+        self.max_y = max_y
+
+        self.fish_idle_up = Actor("enemy/fish/fish_up_rest.png")
+        self.fish_idle_down = Actor("enemy/fish/fish_down_rest.png")
+        self.fish_up = Actor("enemy/fish/fish_up.png")
+        self.fish_up2 = Actor("enemy/fish/fish_up2.png")
+        self.fish_down = Actor("enemy/fish/fish_down.png")
+        
+        self.frame_count = 0
+        self.sprite_index = 0
+
+        self.fish_jump = [self.fish_up,self.fish_up2]
+        self.fish_fall = [self.fish_down,self.fish_idle_down]
+        self.current_sprite_vector = self.fish_jump
+        self.current_sprite = self.current_sprite_vector[0]
+        
+
+    def update(self):
+        if not self.live:
+            return
+
+        self.y += self.vy
+
+        
+        # Change direction
+        if self.y > self.min_y or self.y < self.max_y:
+            self.vy *= -1
+            self.facing_up = not self.facing_up
+        
+        # Select sprites
+        if self.vy > 0:
+            self.current_sprite_vector = self.fish_fall
+        elif self.vy < 0:
+            self.current_sprite_vector = self.fish_jump
+
+        self.frame_count += 1
+        if self.frame_count % 10 == 0:
+            self.sprite_index = (self.sprite_index + 1) % len(self.current_sprite_vector)
+            self.current_sprite = self.current_sprite_vector[self.sprite_index]
+
+
+    def draw(self):    
+        if self.live:
+            self.current_sprite.pos = (self.x - camera_x, self.y)
+            self.current_sprite.draw()
+
 
 
 class Hud_life:
@@ -503,11 +620,14 @@ class Hud_life:
 
 
 def update():
-    global camera_x, camera_y
-    if music_on:
-        sound_music.play()
-    else:
-        sound_music.stop()
+    global camera_x, camera_y,game_state,music_playing
+    if music_on and not music_playing:
+        music.play("tema")
+        music.set_volume(0.5)
+        music_playing = True
+    elif not music_on and music_playing:
+        music.stop()
+        music_playing = False
 
     if game_state == "playing" and player:
         
@@ -516,16 +636,29 @@ def update():
         player.update(platforms,enemies)
         hud.update(player)
         camera_x = player.x - WIDTH/2
+        for plat in platforms:
+            if plat.final:
+                # Checa colisão simples (ajuste se necessário)
+                if (player.x + player.width/2 > plat.rect.left and
+                    player.x - player.width/2 < plat.rect.right and
+                    player.y + player.height/2 > plat.rect.top and
+                    player.y - player.height/2 < plat.rect.bottom):
+                    # 3. Muda o estado do jogo
+                    game_state = "end_game"
+
 
 
 def start_game():
     global platforms, player, enemies,hud,background
-    background = Background()
+    background = [Background(),Background(1780,500,True),Background(1908,500,True),Background(1908+128,500,True)]
     platforms = [
     Platform(0, 500, 5, "horizontal"),
     Platform(300, 350, 3, "horizontal"),
-    Platform(700, 350, 3, "horizontal"),
-    Platform(500, 500, 20, "horizontal")]
+    Platform(500, 500, 20, "horizontal"),
+    Platform(1908+128+64, 350, 20, "horizontal"),
+    Platform(3350, 320, 1, "horizontal",True)
+
+    ]
     
     enemies = []
     plat = platforms[2]
@@ -534,6 +667,10 @@ def start_game():
     enemies.append(Enemy_frog(700,plat.y - 32,700,1000))
     enemies.append(Enemy_bee(100,200,100,500))
     enemies.append(Enemy_bee(500,200,500,900))
+    enemies.append(Enemy_fish(1840,400,600,300))
+    enemies.append(Enemy_fish(1908+128,400,600,300))
+
+
     player = Player(enemies)
     hud = Hud_life(player)
 
