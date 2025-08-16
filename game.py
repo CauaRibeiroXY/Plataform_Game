@@ -636,6 +636,10 @@ def update():
         player.update(platforms,enemies)
         hud.update(player)
         camera_x = player.x - WIDTH/2
+
+        if player.lives <= 0:
+            game_state = "end_game"
+
         for plat in platforms:
             if plat.final:
                 # Checa colisão simples (ajuste se necessário)
